@@ -1,0 +1,2 @@
+[console_scripts]
+audit-merge = audit_merge.tui.app:main

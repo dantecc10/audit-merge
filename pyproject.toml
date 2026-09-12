@@ -1,0 +1,64 @@
+[project]
+name = "audit-merge"
+version = "1.0.0"
+description = "Audit document merge tool for payroll verification"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openpyxl>=3.1.2",
+    "textual>=0.52.0",
+    "rich>=13.7.0",
+    "python-dateutil>=2.8.2",
+    "rapidfuzz>=3.9.0",
+]
+
+[project.scripts]
+audit-merge = "audit_merge.tui.app:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+build = [
+    "pyinstaller>=6.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pyinstaller]
+name = "audit-merge"
+onefile = true
+windowed = false
+icon = "assets/icon.ico"
+add-data = [
+    "src/audit_merge = audit_merge",
+]
+hidden-imports = [
+    "textual",
+    "textual.widgets",
+    "textual.screen",
+    "textual.app",
+    "rich",
+    "openpyxl",
+    "rapidfuzz",
+    "dateutil",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "W", "UP", "B", "C4", "T20"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
