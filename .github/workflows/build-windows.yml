@@ -30,7 +30,7 @@ jobs:
       
     - name: Verify executable
       run: |
-        ls -la dist/
+        Get-ChildItem dist/
         if (Test-Path dist\audit-merge.exe) { Write-Host "Executable built successfully" } else { exit 1 }
         
     - name: Upload artifact
