@@ -31,7 +31,7 @@ jobs:
     - name: Verify executable
       run: |
         ls -la dist/
-        dist\audit-merge.exe --help 2>&1 | head -5 || true
+        if (Test-Path dist\audit-merge.exe) { Write-Host "Executable built successfully" } else { exit 1 }
         
     - name: Upload artifact
       uses: actions/upload-artifact@v4
