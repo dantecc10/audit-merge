@@ -1,21 +1,26 @@
 [project]
 name = "audit-merge"
-version = "1.0.0"
+version = "2.0.0"
 description = "Audit document merge tool for payroll verification"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "openpyxl>=3.1.2",
-    "textual>=0.52.0",
-    "rich>=13.7.0",
+    "PySide6>=6.6.0",
     "python-dateutil>=2.8.2",
     "rapidfuzz>=3.9.0",
 ]
 
 [project.scripts]
-audit-merge = "audit_merge.tui.app:main"
+audit-merge = "audit_merge.gui.app:main"
+audit-merge-web = "audit_merge.web.app:app"
 
 [project.optional-dependencies]
+web = [
+    "flask>=3.0.0",
+    "python-dotenv>=1.0.0",
+    "werkzeug>=3.0.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
@@ -30,20 +35,22 @@ build = [
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pyinstaller]
 name = "audit-merge"
 onefile = true
-windowed = false
+windowed = true
 icon = "assets/icon.ico"
 add-data = [
     "src/audit_merge = audit_merge",
 ]
 hidden-imports = [
-    "textual",
-    "textual.widgets",
-    "textual.screen",
-    "textual.app",
-    "rich",
+    "PySide6",
+    "PySide6.QtWidgets",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
     "openpyxl",
     "rapidfuzz",
     "dateutil",
@@ -56,6 +63,8 @@ target-version = ["py311"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "C4", "T20"]
 ignore = ["E501", "B008"]
 

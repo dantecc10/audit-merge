@@ -1,6 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
 from enum import Enum
 
 
@@ -59,26 +57,26 @@ class DocumentChecklist:
 
     def has_x_removed(self, other: "DocumentChecklist") -> list[str]:
         removed = []
-        for field in self.CHECKLIST_FIELDS:
-            self_val = getattr(self, field).strip().upper()
-            other_val = getattr(other, field).strip().upper()
+        for f in self.CHECKLIST_FIELDS:
+            self_val = getattr(self, f).strip().upper()
+            other_val = getattr(other, f).strip().upper()
             if self_val == "X" and other_val != "X":
-                removed.append(field)
+                removed.append(f)
         return removed
 
     def has_x_added(self, other: "DocumentChecklist") -> list[str]:
         added = []
-        for field in self.CHECKLIST_FIELDS:
-            self_val = getattr(self, field).strip().upper()
-            other_val = getattr(other, field).strip().upper()
+        for f in self.CHECKLIST_FIELDS:
+            self_val = getattr(self, f).strip().upper()
+            other_val = getattr(other, f).strip().upper()
             if self_val != "X" and other_val == "X":
-                added.append(field)
+                added.append(f)
         return added
 
 
 @dataclass
 class Worker:
-    no: Optional[int] = None
+    no: int | None = None
     nombre: str = ""
     curp: str = ""
     nss: str = ""
@@ -91,6 +89,7 @@ class Worker:
     fecha_baja_3: str = ""
     checklist: DocumentChecklist = field(default_factory=DocumentChecklist)
     row_index: int = 0
+    extra_fields: dict = field(default_factory=dict)
 
     @property
     def key(self) -> tuple:
@@ -112,24 +111,31 @@ class FieldDiff:
 @dataclass
 class WorkerDiff:
     worker_key: tuple
-    base_worker: Optional[Worker] = None
-    updated_worker: Optional[Worker] = None
+    base_worker: Worker | None = None
+    updated_worker: Worker | None = None
     field_diffs: list[FieldDiff] = field(default_factory=list)
     checklist_added: list[str] = field(default_factory=list)
     checklist_removed: list[str] = field(default_factory=list)
     data_changed: list[str] = field(default_factory=list)
+    extra_added: list[str] = field(default_factory=list)
+    extra_removed: list[str] = field(default_factory=list)
+    extra_changed: list[str] = field(default_factory=list)
 
     @property
     def has_conflicts(self) -> bool:
-        return bool(self.checklist_removed or self.data_changed or 
+        return bool(self.checklist_removed or self.data_changed or
+                    self.extra_changed or self.extra_added or self.extra_removed or
                    (self.base_worker is None) != (self.updated_worker is None))
 
     @property
     def is_auto_mergeable(self) -> bool:
-        return (self.checklist_added and 
-                not self.checklist_removed and 
+        return (self.checklist_added and
+                not self.checklist_removed and
                 not self.data_changed and
-                self.base_worker is not None and 
+                not self.extra_changed and
+                not self.extra_added and
+                not self.extra_removed and
+                self.base_worker is not None and
                 self.updated_worker is not None)
 
     @property
@@ -141,6 +147,8 @@ class WorkerDiff:
             parts.append(f"X added: {len(self.checklist_added)}")
         if self.data_changed:
             parts.append(f"Data changed: {len(self.data_changed)}")
+        if self.extra_changed:
+            parts.append(f"Extra fields changed: {len(self.extra_changed)}")
         if self.base_worker is None:
             parts.append("New worker")
         if self.updated_worker is None:

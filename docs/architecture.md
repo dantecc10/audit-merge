@@ -2,7 +2,7 @@
 
 ## Overview
 
-Audit Merge is a Python-based TUI application for comparing and merging Excel spreadsheet changes in payroll audit workflows. Built with Textual for the terminal UI and openpyxl for Excel processing.
+Audit Merge is a Python application for comparing and merging Excel spreadsheet changes in payroll audit workflows. Available as a **native desktop GUI (PySide6)** for offline use and as a **web application (Flask)** for networked use. Both frontends share the same core: `models`, `excel`, and `diff`.
 
 ## Project Structure
 
@@ -11,12 +11,22 @@ src/audit_merge/
 ├── __init__.py              # Package entry point
 ├── models/__init__.py       # Data models (Worker, DocumentChecklist, WorkerDiff, MergeStats)
 ├── excel/
+│   ├── __init__.py
 │   └── io.py               # Excel read/write with formatting preservation
 ├── diff/
+│   ├── __init__.py
 │   └── merge.py            # Diff algorithm, worker matching, merge logic
-└── tui/
-    └── app.py              # Textual TUI application
+├── gui/
+│   ├── __init__.py
+│   └── app.py              # PySide6 desktop GUI
+└── web/
+    ├── __init__.py
+    ├── app.py              # Flask web application
+    ├── static/
+    └── templates/
 ```
+
+Entry points: `run_gui.py` (desktop) and `run_web.py` (web, port 5001).
 
 ## Data Models
 
@@ -154,32 +164,30 @@ def copy_cell_style(source: Cell, target: Cell):
     target.protection = copy.copy(source.protection)
 ```
 
-## TUI Architecture
+## UI Architecture
 
-### Screens
-1. **FilePickerScreen** (×2) — DirectoryTree-based file selection
-2. **StatsScreen** — Dashboard with counts and action buttons
-3. **ConflictReviewScreen** — One-by-one conflict navigator
-4. **ManualEditScreen** — Field-by-field editor for complex conflicts
+Both interfaces expose the same workflow: select files → statistics → review conflicts → save.
 
-### Navigation Flow
-```
-FilePicker(base) → FilePicker(updated) → StatsScreen
-    ↓                                           ↓
-    ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-    ↓                                           ↓
-ConflictReviewScreen (per conflict) → ManualEditScreen (optional)
-    ↓
-StatsScreen (updated stats) → Save → Output file
-```
+### Desktop GUI (`gui/app.py`)
+Native PySide6/Qt application:
+1. **MainWindow** hosts a `QStackedWidget` with four screens.
+2. **MergeWorker** (`QThread`) runs the diff pipeline off the UI thread and reports progress via signals.
+3. **FileSelectionScreen** — pick base and updated `.xlsx` files.
+4. **StatsScreen** — dashboard with live counts and action buttons (Apply Auto-Merge, Review Conflicts, Save).
+5. **ConflictReviewScreen** — one-by-one conflict navigation with Keep Base / Use Updated / Manual Edit.
 
-### Key Bindings
-| Screen | Keys |
-|--------|------|
-| FilePicker | ↑/↓ navigate, Enter select, Esc cancel |
-| Stats | A=auto-merge, R=review, S=save, Esc=back |
-| ConflictReview | N/P=next/prev, K=keep base, U=use updated, M=manual, Esc=done |
-| ManualEdit | Enter save, Esc cancel |
+### Web (`web/app.py`)
+Flask application with server-side session state:
+- Routes: upload base/updated, process, auto-merge (POST), conflict resolution (POST), export/save.
+- Templates: `index.html`, `conflicts.html`, base layout in `templates/base.html`.
+- State stored per browser session; files kept in an `uploads/` folder.
+- `export_merged` serializes and runs the same merge pipeline as the GUI, reusing `build_merged_workers`.
+
+### Shared Merge Builder (`build_merged_workers`)
+Both the GUI save handler and the web `export_merged` finalize the merged result through the same function in `diff/merge.py`:
+- Unions base + updated workers (base-only workers are kept).
+- Applies auto-merged workers and manual resolutions.
+- Base workers keep their original rows; brand-new workers are appended to the first free rows, preventing row collisions that could overwrite existing workers.
 
 ## Output Naming
 
@@ -192,9 +200,8 @@ Example: Expedientes-Plantilla_Jaes_2025_Merged_20250912_143022.xlsx
 
 ### PyInstaller Spec
 - Single file executable (`onefile=True`)
-- Console mode (`console=True`)
-- Hidden imports for all Textual widgets
-- UPX compression enabled
+- Windowed mode (`console=False`)
+- Hidden imports for PySide6, openpyxl, rapidfuzz, dateutil
 - Custom icon (Windows/macOS)
 
 ### CI/CD

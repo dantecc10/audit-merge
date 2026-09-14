@@ -24,17 +24,25 @@ pip install -e .[dev]
 | Package | Purpose | Version |
 |---------|---------|---------|
 | `openpyxl` | Excel read/write | ≥3.1.2 |
-| `textual` | TUI framework | ≥0.52.0 |
-| `rich` | Terminal formatting | ≥13.7.0 |
+| `PySide6` | Desktop GUI framework | ≥6.6.0 |
 | `rapidfuzz` | Fuzzy string matching | ≥3.9.0 |
 | `python-dateutil` | Date parsing | ≥2.8.2 |
-| `pyinstaller` | Executable building | ≥6.5.0 |
+| `flask` | Web frontend (extra `web`) | ≥3.0.0 |
+| `python-dotenv` | Web env config (extra `web`) | ≥1.0.0 |
+| `pyinstaller` | Executable building (extra `build`) | ≥6.5.0 |
 
 ## Running the Application
 
-### From Source
+### GUI (desktop, offline)
 ```bash
-python run_app.py
+python run_gui.py
+```
+
+### Web
+```bash
+pip install -e ".[web]"
+python run_web.py
+# http://localhost:5001
 ```
 
 ### Run Tests
@@ -74,11 +82,16 @@ audit-merge/
 │       │   └── io.py           # Excel I/O with formatting
 │       ├── diff/
 │       │   └── merge.py        # Diff & merge algorithms
-│       └── tui/
-│           └── app.py          # Textual TUI application
+│       ├── gui/
+│       │   └── app.py          # PySide6 desktop GUI
+│       └── web/
+│           ├── app.py          # Flask web application
+│           ├── static/
+│           └── templates/
 ├── audit-merge.spec             # PyInstaller configuration
 ├── pyproject.toml               # Project metadata & build config
-├── run_app.py                   # Entry point
+├── run_gui.py                   # Desktop entry point
+├── run_web.py                   # Web entry point
 ├── README.md
 ├── CHANGELOG.md
 └── .gitignore
@@ -96,12 +109,19 @@ audit-merge/
 Edit `diff/merge.py`:
 - `_find_fuzzy_match()` — adjust threshold, add fields
 - `match_workers()` — change key composition
+- `build_merged_workers()` — final row assignment for export (base rows preserved, new workers appended to free rows)
 
-### Adding TUI Screens
-1. Create new `Screen` subclass in `tui/app.py`
-2. Add `BINDINGS` for keyboard shortcuts
-3. Implement `compose()`, event handlers, actions
-4. Navigate with `self.app.push_screen(Screen(...))`
+### Adding GUI Screens
+1. Create a new `QWidget` subclass in `gui/app.py`
+2. Add it to the `QStackedWidget` in `MainWindow`
+3. Wire navigation with `self.stack.setCurrentIndex(n)`
+4. Mirror the route/action in the web templates if needed
+
+### Adding Web Routes
+1. Define the route in `web/app.py`
+2. Add/extend the template in `web/templates/`
+3. Reuse core functions from `diff/merge.py` and `excel/io.py`; keep serialization helpers (`_serialize_worker`/`_deserialize_worker`) in sync
+4. Ensure `export_merged` uses `build_merged_workers`
 
 ### Extending Excel Output
 - Modify `write_workers_to_sheet()` in `excel/io.py`
@@ -175,7 +195,7 @@ logging.basicConfig(level=logging.DEBUG)
 | Issue | Solution |
 |-------|----------|
 | Import errors | Run `pip install -e .` |
-| Textual widget not found | Add to `hiddenimports` in spec |
+| PySide6 widget/import not found | Add to `hiddenimports` in spec |
 | Excel formatting lost | Check `copy_cell_style()` |
 | Worker not matched | Verify CURP/NSS normalization |
 
@@ -198,11 +218,14 @@ logging.basicConfig(level=logging.DEBUG)
 
 ## Architecture Decisions
 
-### Why Textual?
-- Native terminal UI (no X11/Wayland dependencies)
-- Keyboard-first navigation
-- Cross-platform (Linux, Windows, macOS)
-- Built-in widgets (DirectoryTree, DataTable, etc.)
+### Why PySide6 (GUI)?
+- Native desktop UI (works offline, Linux + Windows)
+- Same workflow as the web version, sharing the same core
+- Threaded merge via `QThread` keeps the UI responsive
+
+### Why Flask (Web)?
+- Network access for users that need it
+- Same core engine, routes delegate to `diff/merge.py` and `excel/io.py`
 
 ### Why openpyxl?
 - Full formatting preservation
@@ -224,7 +247,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 ```bash
 # Profile diff algorithm
-python -m cProfile -o profile.stats -m audit_merge.tui.app
+python -m cProfile -o profile.stats -m audit_merge.gui.app
 # Analyze with snakeviz
 snakeviz profile.stats
 ```

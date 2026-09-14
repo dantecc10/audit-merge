@@ -79,68 +79,111 @@ def copy_cell_style(source: Cell, target: Cell):
         target.protection = copy.copy(source.protection)
 
 
+def _normalize_header(text: str) -> str:
+    """Normalize a header string: lowercase, strip accents, collapse whitespace."""
+    import unicodedata
+    import re
+    text = text.strip().lower()
+    # Strip accents: decomposition + remove combining marks
+    nfkd = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in nfkd if not unicodedata.combining(c))
+    # Remove trailing/leading punctuation (e.g. "No." -> "no", "N° Caja" -> "no caja")
+    text = text.strip(" .,;:()[]'\"`“”")
+    # Collapse multiple spaces
+    text = " ".join(text.split())
+    return text
+
+
 def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> Dict[str, int]:
     """
     Detect column mapping by reading headers from the header row.
     Returns a dict mapping field_name -> column_index.
+
+    Matching strategy (in order):
+    1. Exact match against normalized aliases
+    2. For short aliases (1-2 words), exact word match only
+    3. For longer aliases (3+ words), containment is allowed
     """
     column_map = {}
     max_col = ws.max_column
-    
-    # Normalized header names for matching
+
     header_aliases = {
-        "no": ["no", "número", "numero", "#"],
+        "no": ["no", "numero", "#"],
         "nombre": ["nombre", "nombre del colaborador", "colaborador", "trabajador"],
         "curp": ["curp"],
-        "nss": ["nss", "num seguridad social", "número de seguridad social"],
+        "nss": ["nss", "num seguridad social", "numero de seguridad social"],
         "depto": ["depto", "departamento", "depart"],
         "puesto": ["puesto", "cargo"],
         "salario": ["salario", "sueldo"],
         "fecha_reingreso": ["fecha de reingreso", "reingreso", "fecha reingreso"],
         "fecha_baja": ["fecha de baja", "baja", "fecha baja"],
-        "fecha_baja_2": ["fe cha de baja", "fecha baja 2", "fecha baja (2)"],
-        "fecha_baja_3": ["fe cha de baja", "fecha baja 3", "fecha baja (3)"],
+        "fecha_baja_2": ["fecha baja 2", "fecha baja (2)"],
+        "fecha_baja_3": ["fecha baja 3", "fecha baja (3)"],
         "solicitud_empleo": ["solicitud de empleo", "solicitud empleo"],
         "fecha_solicitud": ["fecha solicitud"],
         "firma": ["firma"],
         "curriculum_vitae": ["curriculum vitae", "curriculum", "cv"],
         "acta_nacimiento": ["acta de nacimiento", "acta nacimiento"],
         "ine": ["ine", "credencial"],
-        "c_domicilio": ["c. domicilio", "comprobante domicilio", "domicilio"],
-        "c_estudios": ["c. estudios", "comprobante estudios", "estudios"],
-        "constancia_situacion_fiscal": ["constancia situación fiscal", "constancia fiscal", "situación fiscal"],
-        "numero_imss": ["número de imss", "numero imss", "imss"],
-        "curp_checklist": ["curp ", "curp (checklist)", "curp checklist"],
+        "c_domicilio": ["c. domicilio", "comprobante de domicilio", "comprobante domicilio", "domicilio"],
+        "c_estudios": ["c. estudios", "comprobante de estudios", "comprobante estudios", "estudios"],
+        "constancia_situacion_fiscal": [
+            "constancia situacion fiscal", "constancia de situacion fiscal",
+            "constancia fiscal", "situacion fiscal",
+        ],
+        "numero_imss": ["numero de imss", "numero imss", "imss"],
+        "curp_checklist": ["curp checklist", "curp (checklist)"],
         "cta_banco": ["cta-banco", "cuenta banco", "cta banco", "cuenta bancaria"],
         "constancias_laborales": ["constancias laborales", "constancias"],
-        "examen_medico": ["examen médico", "examen medico", "examen"],
-        "validacion_fechas": ["validación de fechas", "validacion fechas", "validación fechas"],
+        "examen_medico": ["examen medico", "examen"],
+        "validacion_fechas": ["validacion de fechas", "validacion fechas"],
         "contrato": ["contrato"],
         "infonavit": ["infonavit"],
-        "designacion_beneficiarios": ["designación beneficiarios", "designacion beneficiarios", "beneficiarios"],
-        "alta_imss": ["alta imss", "alta imss"],
+        "designacion_beneficiarios": [
+            "designacion beneficiarios", "designacion de beneficiarios", "beneficiarios",
+        ],
+        "alta_imss": ["alta imss"],
         "contrato_asignado": ["contrato asignado", "contrato asig."],
-        "no_caja": ["no. caja", "no caja", "número de caja"],
+        "no_caja": ["no. caja", "no caja", "numero de caja"],
         "finiquito": ["finiquito"],
     }
-    
-    # Read headers from header row
+
+    # Pre-normalize all aliases
+    normalized_aliases: Dict[str, list[tuple[str, list[str]]]] = {}
+    for field, aliases in header_aliases.items():
+        normalized_aliases[field] = [
+            (alias, _normalize_header(alias).split()) for alias in aliases
+        ]
+
     for col_idx in range(1, max_col + 1):
         cell = ws.cell(row=header_row, column=col_idx)
-        header = str(cell.value or "").strip().lower()
-        if not header:
+        header = str(cell.value or "")
+        norm = _normalize_header(header)
+        if not norm:
             continue
-        
-        # Try to match header to known fields
+
         matched_field = None
-        for field, aliases in header_aliases.items():
-            if header in aliases or any(alias in header for alias in aliases):
-                matched_field = field
+        for field, alias_list in normalized_aliases.items():
+            for alias_text, alias_words in alias_list:
+                if norm == alias_text:
+                    matched_field = field
+                    break
+            if matched_field:
                 break
-        
-        if matched_field:
+
+        if not matched_field:
+            header_words = norm.split()
+            for field, alias_list in normalized_aliases.items():
+                for alias_text, alias_words in alias_list:
+                    if len(alias_words) >= 3 and alias_text in norm:
+                        matched_field = field
+                        break
+                if matched_field:
+                    break
+
+        if matched_field and matched_field not in column_map:
             column_map[matched_field] = col_idx
-    
+
     return column_map
 
 
@@ -157,38 +200,72 @@ def read_workers_from_sheet(ws: Worksheet, column_map: Optional[Dict[str, int]] 
     """
     Read workers from sheet using dynamic column detection.
     Returns (workers_list, column_map_used).
+    The column_map includes both known fields and any extra columns detected.
+
+    Extra (unrecognized) columns are captured FIRST, before any default fallback,
+    so that real sheet columns are never masked by DEFAULT_COLUMN_MAP positions.
+    Default fallback only fills free columns (no header present) to avoid writing
+    values into the wrong columns.
     """
     if column_map is None:
         column_map = detect_column_mapping(ws)
-    
-    # Ensure core fields are present, fall back to defaults
+    else:
+        column_map = dict(column_map)
+
+    known_cols = set(column_map.values())
+
+    # Detect extra columns: columns with headers not mapped to any known field
+    extra_columns: Dict[str, int] = {}
+    max_col = ws.max_column
+    for col_idx in range(1, max_col + 1):
+        if col_idx in known_cols:
+            continue
+        cell = ws.cell(row=HEADER_ROW, column=col_idx)
+        header = str(cell.value or "").strip()
+        if header:
+            norm = _normalize_header(header)
+            if norm and norm not in column_map:
+                key = f"extra:{norm}"
+                extra_columns[key] = col_idx
+                known_cols.add(col_idx)
+    column_map.update(extra_columns)
+
+    # Ensure core fields are present, but ONLY fall back to free columns
+    # (no header detected at the default position). Never overwrite a column
+    # that holds a real, different header.
     for field in CORE_FIELDS:
-        if field not in column_map and field in DEFAULT_COLUMN_MAP:
-            column_map[field] = DEFAULT_COLUMN_MAP[field]
-    
+        if field in column_map:
+            continue
+        col = DEFAULT_COLUMN_MAP.get(field)
+        if col is None or col in known_cols:
+            continue
+        header_at_col = ws.cell(row=HEADER_ROW, column=col).value
+        if header_at_col is None or str(header_at_col).strip() == "":
+            column_map[field] = col
+            known_cols.add(col)
+
     workers = []
     max_row = ws.max_row
-    
+
     for row_idx in range(DATA_START_ROW, max_row + 1):
         # Check if row has data (using 'no' field as anchor)
         no_col = column_map.get("no", DEFAULT_COLUMN_MAP["no"])
         no_cell = ws.cell(row=row_idx, column=no_col)
         if no_cell.value is None:
             continue
-        
+
         try:
             no = int(no_cell.value) if no_cell.value else None
         except (ValueError, TypeError):
             no = None
-        
-        # Helper to get cell value by field name
+
         def get_cell_value(field: str) -> str:
             col = column_map.get(field)
             if col is None:
                 return ""
             cell = ws.cell(row=row_idx, column=col)
             return _format_cell_value(cell)
-        
+
         worker = Worker(
             no=no,
             nombre=get_cell_value("nombre").strip(),
@@ -203,17 +280,24 @@ def read_workers_from_sheet(ws: Worksheet, column_map: Optional[Dict[str, int]] 
             fecha_baja_3=get_cell_value("fecha_baja_3"),
             row_index=row_idx,
         )
-        
+
         checklist = DocumentChecklist()
         all_fields = CHECKLIST_FIELDS | DATA_FIELDS
         for field_name in all_fields:
             value = get_cell_value(field_name)
             if hasattr(checklist, field_name):
                 setattr(checklist, field_name, value)
-        
         worker.checklist = checklist
+
+        # Read extra fields
+        extra = {}
+        for field_name, col_idx in extra_columns.items():
+            cell = ws.cell(row=row_idx, column=col_idx)
+            extra[field_name] = _format_cell_value(cell)
+        worker.extra_fields = extra
+
         workers.append(worker)
-    
+
     return workers, column_map
 
 
@@ -230,7 +314,12 @@ def _format_cell_value(cell: Cell) -> str:
 def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Optional[Dict[str, int]] = None, template_row: int = DATA_START_ROW):
     """
     Write workers to sheet using the provided column map.
-    Preserves formatting from template row.
+    Preserves formatting from template row. Writes extra_fields to their mapped columns.
+
+    Row assignment: each worker keeps its original row_index when that row is free
+    (preserving base-file layout). When two workers collide on the same row
+    (e.g. a new worker from the updated file lands on a base worker's row), the
+    later worker is re-assigned to the next free row, so no data is overwritten.
     """
     if column_map is None:
         column_map = DEFAULT_COLUMN_MAP.copy()
@@ -241,13 +330,26 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
         cell = ws.cell(row=template_row, column=col_idx)
         template_cells[col_idx] = cell
     
-    # Track which columns we've written to (for preserving extra columns)
+    # Assign collision-free rows, preserving original row_index when available
+    assigned_rows = {}
+    used_rows = set()
+    next_free_row = max([w.row_index for w in workers if w.row_index >= DATA_START_ROW] + [DATA_START_ROW - 1]) + 1
+    for worker in workers:
+        r = worker.row_index
+        if r >= DATA_START_ROW and r not in used_rows:
+            used_rows.add(r)
+        else:
+            while next_free_row in used_rows:
+                next_free_row += 1
+            r = next_free_row
+            next_free_row += 1
+            used_rows.add(r)
+        assigned_rows[id(worker)] = r
+    
     written_cols = set()
     
     for worker in workers:
-        row_idx = worker.row_index
-        if row_idx < DATA_START_ROW:
-            row_idx = DATA_START_ROW + workers.index(worker)
+        row_idx = assigned_rows[id(worker)]
         
         # Write core fields
         for field_name in CORE_FIELDS:
@@ -279,15 +381,24 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
             if template_cell:
                 copy_cell_style(template_cell, cell)
             written_cols.add(col_idx)
+        
+        # Write extra fields
+        for field_name, value in worker.extra_fields.items():
+            col_idx = column_map.get(field_name)
+            if col_idx is None:
+                continue
+            cell = ws.cell(row=row_idx, column=col_idx)
+            template_cell = template_cells.get(col_idx)
+            cell.value = value
+            if template_cell:
+                copy_cell_style(template_cell, cell)
+            written_cols.add(col_idx)
     
     # Preserve any extra columns not in our map (copy from template row)
     for col_idx in range(1, ws.max_column + 1):
         if col_idx not in written_cols and col_idx in template_cells:
-            # For each worker row, copy template cell
             for worker in workers:
-                row_idx = worker.row_index
-                if row_idx < DATA_START_ROW:
-                    row_idx = DATA_START_ROW + workers.index(worker)
+                row_idx = assigned_rows[id(worker)]
                 cell = ws.cell(row=row_idx, column=col_idx)
                 template_cell = template_cells[col_idx]
                 copy_cell_style(template_cell, cell)

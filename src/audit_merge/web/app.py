@@ -1,19 +1,39 @@
-import os
-import json
-import uuid
 import datetime
+import os
+import uuid
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
-from werkzeug.utils import secure_filename
+
 from dotenv import load_dotenv
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
+from werkzeug.utils import secure_filename
 
-# Import the existing audit merge logic
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.audit_merge.excel.io import load_workbook_preserving, read_workers_from_sheet, find_revision_sheet, write_workers_to_sheet, save_workbook
-from src.audit_merge.diff.merge import match_workers, diff_workers, compute_stats, apply_auto_merge, apply_conflict_resolution
-from src.audit_merge.models import Worker, WorkerDiff, DocumentChecklist
+from audit_merge.diff.merge import (
+    apply_auto_merge,
+    apply_conflict_resolution,
+    build_merged_workers,
+    compute_stats,
+    diff_workers,
+    match_workers,
+)
+from audit_merge.excel.io import (
+    find_revision_sheet,
+    load_workbook_preserving,
+    merge_column_maps,
+    read_workers_from_sheet,
+    save_workbook,
+    write_workers_to_sheet,
+)
+from audit_merge.models import ChangeType, DocumentChecklist, FieldDiff, Worker, WorkerDiff
 
 load_dotenv()
 
@@ -113,6 +133,7 @@ def _serialize_worker(worker: Worker) -> dict:
             "finiquito": worker.checklist.finiquito,
         },
         "row_index": worker.row_index,
+        "extra_fields": worker.extra_fields or {},
     }
 
 def _serialize_diff(diff: WorkerDiff) -> dict:
@@ -133,6 +154,9 @@ def _serialize_diff(diff: WorkerDiff) -> dict:
         "checklist_added": diff.checklist_added,
         "checklist_removed": diff.checklist_removed,
         "data_changed": diff.data_changed,
+        "extra_added": diff.extra_added,
+        "extra_removed": diff.extra_removed,
+        "extra_changed": diff.extra_changed,
     }
 
 def _deserialize_worker(data: dict) -> Worker:
@@ -152,12 +176,11 @@ def _deserialize_worker(data: dict) -> Worker:
         fecha_baja_3=data["fecha_baja_3"],
         checklist=checklist,
         row_index=data["row_index"],
+        extra_fields=data.get("extra_fields", {}),
     )
 
 def _deserialize_diff(data: dict) -> WorkerDiff:
     """Deserialize dict to WorkerDiff object"""
-    from src.audit_merge.models import FieldDiff, ChangeType
-    
     field_diffs = []
     for fd in data["field_diffs"]:
         field_diffs.append(FieldDiff(
@@ -166,7 +189,7 @@ def _deserialize_diff(data: dict) -> WorkerDiff:
             updated_value=fd["updated_value"],
             change_type=ChangeType(fd["change_type"]),
         ))
-    
+
     return WorkerDiff(
         worker_key=data["worker_key"],
         base_worker=_deserialize_worker(data["base_worker"]) if data["base_worker"] else None,
@@ -175,6 +198,9 @@ def _deserialize_diff(data: dict) -> WorkerDiff:
         checklist_added=data["checklist_added"],
         checklist_removed=data["checklist_removed"],
         data_changed=data["data_changed"],
+        extra_added=data.get("extra_added", []),
+        extra_removed=data.get("extra_removed", []),
+        extra_changed=data.get("extra_changed", []),
     )
 
 def _serialize_workers_for_template(workers):
@@ -335,7 +361,7 @@ def process_merge():
     # Run diff
     matches = match_workers(base_workers, updated_workers)
     diffs = []
-    for key, (base_w, updated_w) in matches.items():
+    for _key, (base_w, updated_w) in matches.items():
         diffs.append(diff_workers(base_w, updated_w))
 
     stats = compute_stats(diffs)
@@ -343,6 +369,7 @@ def process_merge():
     # Serialize diffs for storage
     state["diffs"] = [_serialize_diff(d) for d in diffs]
     state["stats"] = stats.to_dict()
+    state["merged_col_map"] = merge_column_maps(base_column_map, updated_column_map)
     state["current_step"] = 4
     _save_state(state)
 
@@ -358,8 +385,6 @@ def auto_merge():
         return redirect(url_for("index"))
 
     diffs = [_deserialize_diff(d) for d in state["diffs"]]
-    base_workers = [_deserialize_worker(w) for w in state["base_workers"]]
-    updated_workers = [_deserialize_worker(w) for w in state["updated_workers"]]
 
     auto_merged = 0
     merged_workers = {}
@@ -424,6 +449,8 @@ def resolve_conflict():
             "fecha_reingreso": base.fecha_reingreso, "fecha_baja": base.fecha_baja,
             "fecha_baja_2": base.fecha_baja_2, "fecha_baja_3": base.fecha_baja_3,
         })
+        for k, v in (base.extra_fields or {}).items():
+            resolution[k] = v
     elif action == "use_updated" and updated:
         resolution = {f: getattr(updated.checklist, f) for f in
                      DocumentChecklist.CHECKLIST_FIELDS + DocumentChecklist.DATA_FIELDS}
@@ -433,6 +460,8 @@ def resolve_conflict():
             "fecha_reingreso": updated.fecha_reingreso, "fecha_baja": updated.fecha_baja,
             "fecha_baja_2": updated.fecha_baja_2, "fecha_baja_3": updated.fecha_baja_3,
         })
+        for k, v in (updated.extra_fields or {}).items():
+            resolution[k] = v
     elif action == "manual":
         resolution = manual_values
     else:
@@ -473,32 +502,22 @@ def export_merged():
     base_workers = [_deserialize_worker(w) for w in state["base_workers"]]
     updated_workers = [_deserialize_worker(w) for w in state["updated_workers"]]
 
-    all_workers = {}
-    for w in base_workers:
-        all_workers[w.key] = w
-    for w in updated_workers:
-        all_workers[w.key] = w
+    # Apply auto-merged and manual resolutions
+    diffs = [_deserialize_diff(d) for d in state.get("diffs", [])]
+    merged_workers = {
+        k: _deserialize_worker(v) for k, v in state.get("merged_workers", {}).items()
+    }
+    resolutions = state.get("resolutions", {})
 
-    # Apply auto-merged
-    if "merged_workers" in state:
-        for key, worker_data in state["merged_workers"].items():
-            all_workers[key] = _deserialize_worker(worker_data)
-
-    # Apply manual resolutions
-    if "resolutions" in state:
-        diffs = [_deserialize_diff(d) for d in state.get("diffs", [])]
-        for key, resolution in state["resolutions"].items():
-            diff = next((d for d in diffs if d.worker_key == key), None)
-            if diff and diff.base_worker and diff.updated_worker:
-                merged = apply_conflict_resolution(diff.base_worker, diff.updated_worker, resolution)
-                all_workers[key] = merged
-            elif diff and diff.updated_worker:
-                all_workers[key] = diff.updated_worker
-
-    # Write to sheet using base column map
-    base_column_map = state.get("base_file", {}).get("column_map", {})
-    sorted_workers = sorted(all_workers.values(), key=lambda w: (w.no or 0, w.nombre))
-    write_workers_to_sheet(ws, sorted_workers, column_map=base_column_map)
+    # Write to sheet using merged column map (base + updated extras)
+    merged_col_map = state.get("merged_col_map") or merge_column_maps(
+        state.get("base_file", {}).get("column_map", {}),
+        state.get("updated_file", {}).get("column_map", {}),
+    )
+    sorted_workers = build_merged_workers(
+        base_workers, updated_workers, merged_workers, diffs, resolutions,
+    )
+    write_workers_to_sheet(ws, sorted_workers, column_map=merged_col_map)
 
     # Save output
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -539,10 +558,6 @@ def api_diff_detail(index):
             for fd in diff.field_diffs
         ],
     })
-
-
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 if __name__ == "__main__":

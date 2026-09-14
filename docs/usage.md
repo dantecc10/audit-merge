@@ -1,174 +1,74 @@
 # User Guide
 
+## Interfaces
+
+The tool has two interfaces that share the same workflow:
+
+- **GUI nativa (escritorio)**: `python run_gui.py` — funciona sin conexión.
+- **Web**: `python run_web.py` y abrir `http://localhost:5001` — desde un navegador, con red.
+
 ## Getting Started
 
 ### Windows
 1. Download `audit-merge.exe` from the [Releases page](https://github.com/dantecc10/audit-merge/releases)
 2. Double-click to run (or run from Command Prompt/PowerShell)
 
-### Linux
+### Linux / Fuente
 ```bash
-# Option 1: Run from source
 git clone https://github.com/dantecc10/audit-merge
 cd audit-merge
 pip install -e .
-python run_app.py
-
-# Option 2: Build and run executable
-pip install pyinstaller
-pyinstaller audit-merge.spec --clean
-./dist/audit-merge
+python run_gui.py    # GUI desktop
+# o
+python run_web.py    # Web (http://localhost:5001)
 ```
 
 ## Step-by-Step Workflow
 
 ### 1. Select Base Document
-When the app starts, you'll see the **File Picker** screen:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Select base File                                            │
-├─────────────────────────────────────────────────────────────┤
-│ Selected file path will appear here...                      │
-├─────────────────────────────────────────────────────────────┤
-│ 📂 home                                                     │
-│ ├── 📁 user                                                 │
-│ │   ├── 📁 Documents                                        │
-│ │   │   ├── 📄 plantilla.xlsx        ← Navigate with ↑/↓   │
-│ │   │   └── 📄 otros.xlsx             ← Enter to select    │
-│ │   └── 📁 Downloads                                      │
-│ └── 📁 ...                                                │
-├─────────────────────────────────────────────────────────────┤
-│ [Confirm] (disabled until .xlsx selected)   [Cancel]       │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Actions:**
-- `↑/↓` — Navigate directory tree
-- `←/→` — Collapse/expand folders
-- `Enter` — Select file (only `.xlsx`/`.xls` enabled)
-- `Esc` — Cancel and exit
+En la GUI: haz clic en **Seleccionar archivo base**. En la web: usa el formulario de subida en la página principal.
 
 ### 2. Select Updated Document
-Same file picker appears for the worker's updated file.
+Selecciona igualmente el archivo actualizado del trabajador.
 
 ### 3. Statistics Dashboard
-After both files are loaded, the **Statistics Dashboard** shows:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Statistics Dashboard                                        │
-├─────────────────────────────────────────────────────────────┤
-│ Base file workers:        859                               │
-│ Updated file workers:     847                               │
-│                                                                 │
-│ ✓ Auto-mergeable:         723                               │
-│ ⚠ Conflicts to review:    124                               │
-│                                                                 │
-│   X's added:              1,234                             │
-│   X's removed:            45                                │
-│   Data fields changed:    32                                │
-│   Workers added:          35                                │
-│   Workers removed:        12                                │
-├─────────────────────────────────────────────────────────────┤
-│ [A] Apply Auto-Merge    [R] Review Conflicts               │
-│ [S] Save Output         [Esc] Back                          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Understanding the counts:**
+Después de procesar ambos archivos, el **panel de estadísticas** muestra:
 
 | Metric | Meaning |
 |--------|---------|
-| **Auto-mergeable** | Workers where only X marks were added (safe to merge automatically) |
-| **Conflicts** | Workers needing manual review (X removed, data changed, or worker added/removed) |
-| **X's added** | Total checklist items newly marked with X |
-| **X's removed** | Total checklist items unmarked (potential issues) |
-| **Data fields changed** | Non-checklist fields modified (name, dept, dates, etc.) |
-| **Workers added/removed** | Rows present in one file but not the other |
+| **Auto-mergeable** | Trabajadores donde solo se añadieron marcas X (seguro de fusionar automáticamente) |
+| **Conflicts** | Trabajadores que requieren revisión manual (X eliminadas, datos cambiados, o trabajador añadido/eliminado) |
+| **X's added** | Total de ítems de checklist marcados nuevos con X |
+| **X's removed** | Total de ítems de checklist desmarcados (posibles problemas) |
+| **Data fields changed** | Campos no-checklist modificados (nombre, depto, fechas, etc.) |
+| **Workers added/removed** | Filas presentes en un archivo pero no en el otro |
 
 ### 4. Apply Auto-Merge (Optional but Recommended)
-Press **`A`** to automatically merge all safe changes:
-- Only applies to workers with **only X additions**
-- No data removed or modified
-- Updates statistics dashboard after completion
+Pulsa **Aplicar Auto-Merge**:
+- Solo aplica a trabajadores con **únicamente adiciones de X**
+- Sin datos eliminados o modificados
+- Actualiza el panel tras completarse
 
 ### 5. Review Conflicts
-Press **`R`** to open the **Conflict Review** screen for each conflicted worker:
+Pulsa **Revisar Conflictos** para revisar uno a uno cada conflicto.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Conflict 1/124: Worker #1641 BALTAZAR ESPINOSA...          │
-├─────────────────────────────────────────────────────────────┤
-│ Field: Acta de Nacimiento (checklist)                       │
-│ Base:    [X]    Updated: [ ]   ← REMOVED                    │
-│ Field: Fecha de baja (data)                                 │
-│ Base:    [22/08/2025]  Updated: [ ]  ← CLEARED              │
-├─────────────────────────────────────────────────────────────┤
-│ [K] Keep Base    [U] Use Updated    [M] Manual Edit         │
-│ [N] Next         [P] Previous     [Esc] Done               │
-└─────────────────────────────────────────────────────────────┘
-```
+**Opciones de resolución:**
+| Opción | Acción | Cuándo usar |
+|--------|--------|-------------|
+| **Mantener Base** | Conserva la versión base | La X fue eliminada por error; la base es correcta |
+| **Usar Actualizado** | Usa la versión del archivo actualizado | El desmarque es intencional; el actualizado es correcto |
+| **Edición Manual** | Control campo por campo (abre formulario) | Necesitas control fino por campo |
 
-**Resolution Options:**
-| Key | Action | When to Use |
-|-----|--------|-------------|
-| `K` | **Keep Base** | X was removed by mistake; base is correct |
-| `U` | **Use Updated** | Worker intentionally unmarked document; updated is correct |
-| `M` | **Manual Edit** | Need field-by-field control (opens detailed form) |
-| `N` / `P` | Next / Previous | Navigate without resolving |
-| `Esc` | Done | Return to dashboard |
+En la web, las mismas decisiones están disponibles dentro de `conflicts.html` mediante formularios.
 
-### 6. Manual Edit (For Complex Conflicts)
-Press **`M`** to edit all fields individually:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Manual Edit: Worker #1641 BALTAZAR ESPINOSA...             │
-├─────────────────────────────────────────────────────────────┤
-│ Nombre:              [BALTAZAR ESPINOSA...           ]      │
-│ CURP:                [BAEA800823HPLLSR02            ]      │
-│ NSS:                 [48008074162                  ]      │
-│ Depto:               [TALACHERIA                  ]      │
-│ Puesto:              [OF TALACHERO B              ]      │
-│ Acta Nacimiento:     [X                            ]      │
-│ INE:                 [X                            ]      │
-│ ...                                                           │
-├─────────────────────────────────────────────────────────────┤
-│ [Save]    [Cancel]                                          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 7. Save Output
-Press **`S`** on the dashboard to generate the merged file:
+### 6. Save Output
+Pulsa **Guardar** para generar el archivo fusionado:
 
 ```
 Output: Expedientes-Plantilla_Jaes_2025_Merged_20250912_143022.xlsx
 ```
 
-The file is saved in the same directory as the base document.
-
-## Keyboard Shortcuts Reference
-
-| Screen | Key | Action |
-|--------|-----|--------|
-| **File Picker** | `↑/↓` | Navigate tree |
-| | `←/→` | Collapse/expand folder |
-| | `Enter` | Select file |
-| | `Esc` | Cancel |
-| **Dashboard** | `A` | Apply auto-merge |
-| | `R` | Review conflicts |
-| | `S` | Save output |
-| | `Esc` | Back to file picker |
-| **Conflict Review** | `K` | Keep base version |
-| | `U` | Use updated version |
-| | `M` | Manual edit |
-| | `N` / `P` | Next / Previous conflict |
-| | `Esc` | Return to dashboard |
-| **Manual Edit** | `Tab` / `Shift+Tab` | Navigate fields |
-| | `Enter` | Save |
-| | `Esc` | Cancel |
-| **Global** | `Ctrl+C` / `Q` | Quit application |
+El archivo se guarda en el mismo directorio que el documento base (en la web, se descarga el archivo generado).
 
 ## Tips & Best Practices
 
@@ -198,13 +98,15 @@ This ensures zero-risk automatic merging.
 
 ## Troubleshooting
 
-### "tkinter not available" (Old versions)
-Fixed in v1.0.3+ — uses Textual's native DirectoryTree.
+### GUI no abre en Linux
+```bash
+# Si no hay display: ejecutar la versión web en su lugar
+python run_web.py
+```
 
-### File picker shows empty
-- Navigate with arrow keys
-- Press `Enter` on folders to expand
-- Ensure you're selecting `.xlsx` or `.xls` files
+### Web no responde
+- Verifica que el puerto 5001 esté libre (`FLASK_PORT` para cambiarlo)
+- Revisa que tengas instalado el extra: `pip install -e ".[web]"`
 
 ### Statistics show unexpected counts
 - Check that both files use the same sheet name ("Revisión Exp")
@@ -215,10 +117,6 @@ Fixed in v1.0.3+ — uses Textual's native DirectoryTree.
 chmod +x audit-merge
 ./audit-merge
 ```
-
-### Permission denied on output
-- Run from a directory you own
-- Check write permissions on base file directory
 
 ## Support
 
