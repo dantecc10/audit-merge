@@ -205,10 +205,11 @@ Example: Expedientes-Plantilla_Jaes_2025_Merged_20250912_143022.xlsx
 - Custom icon (Windows/macOS)
 
 ### CI/CD
-GitHub Actions workflow:
-- Triggers on `v*` tags
-- Builds on `windows-latest`
-- Uploads artifact + creates GitHub Release
+GitHub Actions workflow (`build.yml`):
+- Triggers on `v*` tags (y `workflow_dispatch`)
+- `build-windows`: PyInstaller en `windows-latest` → `audit-merge-windows-<v>.exe`
+- `build-linux`: PyInstaller en `ubuntu-22.04` (glibc 2.35) + `appimagetool` → `audit-merge-<v>-x86_64.AppImage` y binario ELF
+- `release`: job separado que descarga ambos artifacts y crea la GitHub Release (evita carreras). GitHub además genera los `.zip`/`.tar.gz` de source automáticamente.
 
 ## Performance
 

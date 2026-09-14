@@ -10,8 +10,20 @@ The tool has two interfaces that share the same workflow:
 ## Getting Started
 
 ### Windows
-1. Download `audit-merge.exe` from the [Releases page](https://github.com/dantecc10/audit-merge/releases)
+1. Download `audit-merge-windows-<versión>.exe` from the [Releases page](https://github.com/dantecc10/audit-merge/releases)
 2. Double-click to run (or run from Command Prompt/PowerShell)
+
+### Linux
+Descarga `audit-merge-<versión>-x86_64.AppImage` de la página de releases:
+
+```bash
+chmod +x audit-merge-*-x86_64.AppImage
+./audit-merge-*-x86_64.AppImage
+```
+
+- Integración al menú: instala [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) y haz doble clic.
+- Si el sistema no tiene FUSE: `./audit-merge-*-x86_64.AppImage --appimage-extract-and-run`.
+- Alternativa: el binario ELF `audit-merge` incluido en el release (`chmod +x && ./audit-merge`).
 
 ### Linux / Fuente
 ```bash

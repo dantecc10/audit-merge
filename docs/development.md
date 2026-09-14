@@ -68,7 +68,7 @@ mypy src/
 audit-merge/
 ├── .github/
 │   └── workflows/
-│       └── build-windows.yml    # CI/CD for Windows builds
+│       └── build.yml             # CI/CD: Windows exe + Linux AppImage + release
 ├── assets/
 │   └── icon.ico                 # Application icon
 ├── docs/
@@ -132,9 +132,27 @@ Edit `diff/merge.py`:
 
 ### Linux
 ```bash
+pip install pyinstaller
 pyinstaller audit-merge.spec --clean
 # Output: dist/audit-merge
+
+# Empaquetar AppImage
+wget https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+chmod +x appimagetool*
+mkdir -p AppDir/usr/bin && cp dist/audit-merge AppDir/usr/bin/
+cp assets/audit-merge.desktop assets/audit-merge.png AppDir/
+cat > AppDir/AppRun <<'EOF'
+#!/bin/bash
+SELF="$(readlink -f "$0")"
+HERE="${SELF%/*}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+exec "${HERE}/usr/bin/audit-merge" "$@"
+EOF
+chmod +x AppDir/AppRun
+ARCH=x86_64 ./appimagetool*x86_64.AppImage --appimage-extract-and-run AppDir dist/audit-merge-<version>-x86_64.AppImage
 ```
+
+> Compila sobre la distro más antigua que quieras soportar (glibc): el CI usa `ubuntu-22.04`. En la AppImage el ícono lo aporta `assets/audit-merge.png` (PyInstaller ignora `icon.ico` en Linux).
 
 ### Windows
 ```bash
@@ -146,7 +164,7 @@ pyinstaller audit-merge.spec --clean
 ### Cross-Platform Notes
 - **PyInstaller cannot cross-compile** — build on target OS
 - Linux binary won't run on Windows and vice versa
-- GitHub Actions handles Windows builds automatically
+- GitHub Actions builds both (`.exe` en `windows-latest`, AppImage en `ubuntu-22.04`) y publica la release desde un job `release` separado
 
 ## Testing Strategy
 

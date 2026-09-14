@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Audit Merge
+Comment=Herramienta para fusionar cambios en hojas de cálculo de auditoría de nómina
+Exec=audit-merge
+Icon=audit-merge
+Type=Application
+Terminal=false
+Categories=Office;
+StartupNotify=false

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web moved to `src/audit_merge/web/` (imports `audit_merge.*`)
 - `pyproject.toml`: PySide6 replaces `textual`/`rich`; version 2.0.0
 - `audit-merge.spec`: PySide6 hidden imports, `console=False`
+- **Releases Linux**: workflow renombrado a `build.yml` con job `build-linux` (AppImage + binario ELF) y job `release` que publica ambos; el `.exe` de Windows ya no se sube por separado (lo unifica el job `release`)
 
 ## [1.0.3] - 2025-09-12
 
