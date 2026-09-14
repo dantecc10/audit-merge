@@ -12,7 +12,7 @@ def match_workers(base_workers: list[Worker], updated_workers: list[Worker]) -> 
     all_keys = set(base_by_key.keys()) | set(updated_by_key.keys())
     matches = {}
     
-    for key in all_keys:
+    for key in sorted(all_keys, key=lambda k: tuple(str(x) if x is not None else "" for x in k)):
         base_w = base_by_key.get(key)
         updated_w = updated_by_key.get(key)
         

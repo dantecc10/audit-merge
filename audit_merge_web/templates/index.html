@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Paso 0: Convertir horario (opcional) - omitted for audit merge -->
+
+<!-- Paso 1: Cargar archivo base -->
+<section class="card">
+    <h2><span class="step">1</span> Cargar archivo base (plantilla)</h2>
+    <p class="meta" style="margin-bottom:12px">Selecciona el archivo maestro/plantilla que contiene la estructura completa.</p>
+    <form action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data" class="upload-form">
+        <input type="file" name="base_file" accept=".xlsx,.xls" required />
+        <button type="submit">Cargar archivo base</button>
+    </form>
+    {% if base_file %}
+    <p class="meta" style="margin-top:12px">Archivo base: <strong>{{ base_file.filename }}</strong> ({{ base_file.id[:8] }})</p>
+    {% endif %}
+</section>
+
+<!-- Paso 2: Cargar archivo actualizado -->
+<section class="card">
+    <h2><span class="step">2</span> Cargar archivo actualizado</h2>
+    <p class="meta" style="margin-bottom:12px">Selecciona el archivo con los avances de auditoría del trabajador.</p>
+    <form action="{{ url_for('upload_updated') }}" method="post" enctype="multipart/form-data" class="upload-form">
+        <input type="file" name="updated_file" accept=".xlsx,.xls" required />
+        <button type="submit">Cargar archivo actualizado</button>
+    </form>
+    {% if updated_file %}
+    <p class="meta" style="margin-top:12px">Archivo actualizado: <strong>{{ updated_file.filename }}</strong> ({{ updated_file.id[:8] }})</p>
+    {% endif %}
+</section>
+
+<!-- Paso 3: Procesar y comparar -->
+{% if base_file and updated_file %}
+<section class="card">
+    <h2><span class="step">3</span> Procesar y comparar</h2>
+    <p class="meta">Compara ambos archivos y detecta diferencias.</p>
+    <form action="{{ url_for('process_merge') }}" method="post">
+        <button type="submit" style="width:100%">Procesar y comparar</button>
+    </form>
+</section>
+{% endif %}
+
+<!-- Resultados de comparación -->
+{% if stats %}
+<section class="card" id="resultados-section">
+    <h2><span class="step">4</span> Resultados de la comparación</h2>
+    
+    <!-- Estadísticas principales -->
+    <div class="stats-grid">
+        <div class="stat-card stat-card-primary">
+            <div class="stat-icon">📁</div>
+            <div class="stat-value">{{ stats['Workers in base'] }}</div>
+            <div class="stat-label">Trabajadores en base</div>
+        </div>
+        <div class="stat-card stat-card-primary">
+            <div class="stat-icon">📁</div>
+            <div class="stat-value">{{ stats['Workers in updated'] }}</div>
+            <div class="stat-label">Trabajadores en actualizado</div>
+        </div>
+        <div class="stat-card stat-card-success">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value">{{ stats['Auto-mergeable'] }}</div>
+            <div class="stat-label">Auto-mergeables</div>
+        </div>
+        <div class="stat-card stat-card-warning">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-value">{{ stats['Conflicts to review'] }}</div>
+            <div class="stat-label">Conflictos a revisar</div>
+        </div>
+    </div>
+
+    <!-- Desglose detallado -->
+    <div class="panel-section" style="margin-top:16px">
+        <div class="button-group" style="justify-content:flex-start; flex-wrap:wrap;">
+            <span class="badge badge-auto">➕ X's añadidas: {{ stats['X\'s added'] }}</span>
+            <span class="badge badge-removed">➖ X's eliminadas: {{ stats['X\'s removed'] }}</span>
+            <span class="badge badge-modified">🔄 Datos cambiados: {{ stats['Data fields changed'] }}</span>
+            <span class="badge badge-added">➕ Trabajadores nuevos: {{ stats['Workers added'] }}</span>
+            <span class="badge badge-removed">➖ Trabajadores eliminados: {{ stats['Workers removed'] }}</span>
+        </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="button-group" style="margin-top:16px; flex-wrap:wrap;">
+        <form action="{{ url_for('auto_merge') }}" method="post" style="flex:1; min-width:200px;">
+            <button type="submit" class="btn-primary" style="width:100%;">
+                🚀 Aplicar auto-merge ({{ stats['Auto-mergeable'] }})
+            </button>
+        </form>
+        {% if stats['Conflicts to review'] > 0 %}
+        <a href="{{ url_for('conflicts_view') }}" class="btn-primary" style="flex:1; min-width:200px; text-align:center;">
+            🔍 Revisar conflictos ({{ stats['Conflicts to review'] }})
+        </a>
+        {% endif %}
+        <form action="{{ url_for('export_merged') }}" method="post" style="flex:1; min-width:200px;">
+            <button type="submit" class="btn-primary" style="width:100%;">
+                💾 Exportar resultado fusionado
+            </button>
+        </form>
+        <a href="{{ url_for('index') }}" class="btn-secondary" style="flex:1; min-width:200px; text-align:center;">
+            🔄 Reiniciar
+        </a>
+    </div>
+</section>
+{% endif %}
+
+<!-- Detalle de diferencias (acordeón) -->
+{% if diffs %}
+<section class="card">
+    <h2>📋 Detalle de diferencias por trabajador</h2>
+    <div class="accordion">
+        {% for diff in diffs %}
+        <div class="accordion-item {% if diff.base_worker is none or diff.updated_worker is none %}accordion-item-individual{% endif %}">
+            <button class="accordion-header" aria-expanded="false">
+                <div class="accordion-summary">
+                    <span class="accordion-id">#{{ loop.index }}</span>
+                    <span class="accordion-materias">
+                        {% if diff.base_worker %}
+                            {{ diff.base_worker.nombre }} (#{{ diff.base_worker.no }})
+                        {% else %}
+                            NUEVO: {{ diff.updated_worker.nombre }} (#{{ diff.updated_worker.no }})
+                        {% endif %}
+                    </span>
+                    <span class="accordion-meta">
+                        {% if diff.checklist_added %}<span class="badge badge-auto">➕{{ diff.checklist_added|length }}</span>{% endif %}
+                        {% if diff.checklist_removed %}<span class="badge badge-removed">➖{{ diff.checklist_removed|length }}</span>{% endif %}
+                        {% if diff.data_changed %}<span class="badge badge-modified">🔄{{ diff.data_changed|length }}</span>{% endif %}
+                        {% if diff.base_worker is none %}<span class="badge badge-added">NUEVO</span>{% endif %}
+                        {% if diff.updated_worker is none %}<span class="badge badge-removed">ELIMINADO</span>{% endif %}
+                    </span>
+                </div>
+                <span class="accordion-icon">▼</span>
+            </button>
+            <div class="accordion-content">
+                <div class="diff-table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Campo</th>
+                                <th>Base</th>
+                                <th>Actualizado</th>
+                                <th>Cambio</th>
+                            </thead>
+                            <tbody>
+                                {% for fd in diff.field_diffs %}
+                                <tr class="diff-row {% if fd.change_type == 'added' %}-added{% elif fd.change_type == 'removed' %}-removed{% elif fd.change_type == 'modified' %}-modified{% endif %}">
+                                    <td class="diff-field">{{ fd.field_name }}</td>
+                                    <td class="diff-base">{{ fd.base_value or '—' }}</td>
+                                    <td class="diff-updated">{{ fd.updated_value or '—' }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if fd.change_type == 'added' %}badge-added
+                                            {% elif fd.change_type == 'removed' %}badge-removed
+                                            {% elif fd.change_type == 'modified' %}badge-modified
+                                            {% endif %}">
+                                            {% if fd.change_type == 'added' %}➕ Añadido
+                                            {% elif fd.change_type == 'removed' %}➖ Eliminado
+                                            {% elif fd.change_type == 'modified' %}🔄 Modificado
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if diff.has_conflicts %}
+                    <div class="accordion-actions">
+                        <a href="{{ url_for('conflicts_view') }}#conflict-{{ loop.index0 }}" class="btn-primary btn-sm">⚡ Resolver conflicto</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Accordion functionality
+    document.querySelectorAll('.accordion-header').forEach(header => {
+        header.addEventListener('click', function() {
+            const item = this.closest('.accordion-item');
+            const content = item.querySelector('.accordion-content');
+            const icon = this.querySelector('.accordion-icon');
+            const expanded = this.getAttribute('aria-expanded') === 'true';
+            
+            this.setAttribute('aria-expanded', !expanded);
+            content.classList.toggle('open');
+            if (icon) icon.style.transform = expanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        });
+    });
+});
+</script>
+{% endblock %}

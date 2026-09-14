@@ -28,6 +28,10 @@ Thumbs.db
 # Output files
 *_Merged_*.xlsx
 
+# Uploaded test files
+uploads/
+audit_merge_web/uploads/
+
 # Logs
 *.log
 

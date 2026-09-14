@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h2>⚡ Resolver conflictos</h2>
+        <div style="display:flex; gap:8px;">
+            <a href="{{ url_for('index') }}" class="btn-secondary">← Volver</a>
+            <a href="{{ url_for('export_merged') }}" class="btn-primary">💾 Exportar</a>
+        </div>
+    </div>
+    
+    <p class="meta">Revisa cada conflicto y decide cómo resolverlo.</p>
+    
+    <!-- Progress -->
+    <div style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span class="meta">Conflicto {{ current_index + 1 }} de {{ total }}</span>
+            <span class="meta" style="color:var(--accent); font-weight:600;">
+                Progreso: {{ ((current_index) / total * 100)|round(0) }}%
+            </span>
+        </div>
+        <progress value="{{ current_index }}" max="{{ total }}" style="width:100%; height:8px;"></progress>
+    </div>
+</section>
+
+{% if conflicts %}
+{% set conflict = conflicts[current_index] %}
+{% set base = conflict.base_worker %}
+{% set updated = conflict.updated_worker %}
+
+<section class="card">
+    <h3>👤 {{ base.nombre if base else 'NUEVO' }} #{{ base.no if base else updated.no }}</h3>
+    <div class="meta">
+        {% if base %}
+        CURP: {{ base.curp }} | NSS: {{ base.nss }} | Depto: {{ base.depto }}
+        {% else %}
+        NUEVO TRABAJADOR
+        {% endif %}
+    </div>
+</section>
+
+<section class="card">
+    <h3>📋 Diferencias detectadas</h3>
+    <div class="diff-table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Campo</th>
+                    <th>Base (plantilla)</th>
+                    <th>Actualizado (trabajador)</th>
+                    <th>Tipo</th>
+                </thead>
+                <tbody>
+                    {% for fd in conflict.field_diffs %}
+                    <tr class="diff-row {% if fd.change_type == 'added' %}-added{% elif fd.change_type == 'removed' %}-removed{% elif fd.change_type == 'modified' %}-modified{% endif %}">
+                        <td class="diff-field">{{ fd.field_name }}</td>
+                        <td class="diff-base">{{ fd.base_value or '—' }}</td>
+                        <td class="diff-updated">{{ fd.updated_value or '—' }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if fd.change_type == 'added' %}badge-added
+                                {% elif fd.change_type == 'removed' %}badge-removed
+                                {% elif fd.change_type == 'modified' %}badge-modified
+                                {% endif %}">
+                                {% if fd.change_type == 'added' %}➕ Añadido
+                                {% elif fd.change_type == 'removed' %}➖ Eliminado
+                                {% elif fd.change_type == 'modified' %}🔄 Modificado
+                                {% endif %}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Resolución rápida -->
+<section class="card">
+    <h3>⚡ Resolución rápida</h3>
+    <div class="button-group" style="flex-wrap:wrap; gap:12px;">
+        {% if base %}
+        <button type="button" class="btn-primary" onclick="resolveConflict('keep_base')">
+            ✅ Mantener base (plantilla)
+        </button>
+        {% endif %}
+        {% if updated %}
+        <button type="button" class="btn-primary" style="background:var(--success);" onclick="resolveConflict('use_updated')">
+            📝 Usar actualizado (trabajador)
+        </button>
+        {% endif %}
+        <button type="button" class="btn-secondary" onclick="openManualModal()">
+            ✏️ Editar manualmente
+        </button>
+    </div>
+</section>
+
+<!-- Editar manualmente (modal) -->
+<div id="manual-modal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:800px; max-height:90vh; overflow:auto;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; padding:16px; border-bottom:1px solid var(--line);">
+            <h3>✏️ Editar manualmente: {{ base.nombre if base else updated.nombre }}</h3>
+            <button type="button" class="btn-secondary btn-sm" onclick="closeManualModal()">&times;</button>
+        </div>
+        <form id="manual-form">
+            <div class="modal-body" style="padding:16px; max-height:60vh; overflow:auto;">
+                <!-- Datos principales -->
+                <div class="card-section" style="margin-bottom:16px;">
+                    <h4 style="margin-bottom:12px;">📋 Datos principales</h4>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;">
+                        <div class="filter-group">
+                            <label>Nombre</label>
+                            <input type="text" name="nombre" value="{{ base.nombre if base else updated.nombre }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>CURP</label>
+                            <input type="text" name="curp" value="{{ base.curp if base else updated.curp }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>NSS</label>
+                            <input type="text" name="nss" value="{{ base.nss if base else updated.nss }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Depto</label>
+                            <input type="text" name="depto" value="{{ base.depto if base else updated.depto }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Puesto</label>
+                            <input type="text" name="puesto" value="{{ base.puesto if base else updated.puesto }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Salario</label>
+                            <input type="text" name="salario" value="{{ base.salario if base else updated.salario }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Fecha reingreso</label>
+                            <input type="text" name="fecha_reingreso" value="{{ base.fecha_reingreso if base else updated.fecha_reingreso }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Fecha baja</label>
+                            <input type="text" name="fecha_baja" value="{{ base.fecha_baja if base else updated.fecha_baja }}" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Checklist -->
+                <div class="card-section" style="margin-bottom:16px;">
+                    <h4 style="margin-bottom:12px;">📋 Checklist de documentos</h4>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
+                        {% set checklist_fields = [
+                            ('solicitud_empleo', 'Solicitud empleo'),
+                            ('acta_nacimiento', 'Acta nacimiento'),
+                            ('ine', 'INE'),
+                            ('c_domicilio', 'C. domicilio'),
+                            ('c_estudios', 'C. estudios'),
+                            ('constancia_situacion_fiscal', 'Constancia fiscal'),
+                            ('numero_imss', 'Número IMSS'),
+                            ('curp_checklist', 'CURP'),
+                            ('cta_banco', 'Cta. banco'),
+                            ('examen_medico', 'Examen médico'),
+                            ('validacion_fechas', 'Validación fechas'),
+                            ('contrato', 'Contrato'),
+                            ('designacion_beneficiarios', 'Designación ben.'),
+                            ('constancias_laborales', 'Constancias lab.'),
+                            ('infonavit', 'Infonavit'),
+                            ('alta_imss', 'Alta IMSS'),
+                            ('contrato_asignado', 'Contrato asignado'),
+                            ('no_caja', 'No. caja'),
+                            ('finiquito', 'Finiquito'),
+                        ] %}
+                        {% for field, label in checklist_fields %}
+                        <label class="filter-checkbox-label" style="padding:6px 10px;">
+                            <input type="checkbox" name="{{ field }}" 
+                                {% set base_val = base.checklist[field] if base else '' %}
+                                {% set updated_val = updated.checklist[field] if updated else '' %}
+                                {% if base_val == 'X' or updated_val == 'X' %}checked{% endif %}>
+                            {{ label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- Datos adicionales -->
+                <div class="card-section">
+                    <h4 style="margin-bottom:12px;">📅 Datos adicionales</h4>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;">
+                        <div class="filter-group">
+                            <label>Fecha solicitud</label>
+                            <input type="text" name="fecha_solicitud" value="{{ base.checklist.fecha_solicitud if base else updated.checklist.fecha_solicitud }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Firma</label>
+                            <input type="text" name="firma" value="{{ base.checklist.firma if base else updated.checklist.firma }}" style="width:100%;">
+                        </div>
+                        <div class="filter-group">
+                            <label>Curriculum</label>
+                            <input type="text" name="curriculum_vitae" value="{{ base.checklist.curriculum_vitae if base else updated.checklist.curriculum_vitae }}" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="padding:16px; border-top:1px solid var(--line); display:flex; gap:8px; justify-content:flex-end;">
+            <button type="button" class="btn-secondary" onclick="closeManualModal()">Cancelar</button>
+            <button type="button" class="btn-primary" onclick="submitManual()">Guardar cambios</button>
+        </div>
+        </form>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let conflicts = {{ conflicts|tojson }};
+let currentIndex = {{ current_index }};
+let total = {{ total }};
+
+function resolveConflict(action) {
+    fetch('/resolve_conflict', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: action, index: currentIndex})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            if (data.next_index < data.total) {
+                currentIndex = data.next_index;
+                window.location.href = '/conflicts';
+            } else {
+                // All conflicts resolved
+                alert('¡Todos los conflictos resueltos!');
+                window.location.href = '/';
+            }
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+
+function openManualModal() {
+    document.getElementById('manual-modal').style.display = 'flex';
+}
+
+function closeManualModal() {
+    document.getElementById('manual-modal').style.display = 'none';
+}
+
+function submitManual() {
+    const form = document.getElementById('manual-form');
+    const formData = new FormData(form);
+    const manualValues = {};
+    for (let [key, value] of formData.entries()) {
+        manualValues[key] = value;
+    }
+    
+    fetch('/resolve_conflict', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'manual', index: currentIndex, manual_values: manualValues})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            closeManualModal();
+            if (data.next_index < data.total) {
+                currentIndex = data.next_index;
+                window.location.href = '/conflicts?index=' + currentIndex;
+            } else {
+                alert('¡Todos los conflictos resueltos!');
+                window.location.href = '/';
+            }
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+
+function closeManualModal() {
+    document.getElementById('manual-modal').style.display = 'none';
+}
+
+// Close modal on outside click
+document.getElementById('manual-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeManualModal();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeManualModal();
+    const conflict = conflicts[currentIndex];
+    const hasBase = conflict && conflict.base_worker !== null;
+    const hasUpdated = conflict && conflict.updated_worker !== null;
+    if (e.key === 'ArrowRight' && hasUpdated) resolveConflict('use_updated');
+    if (e.key === 'ArrowLeft' && hasBase) resolveConflict('keep_base');
+});
+</script>
+{% endblock %}

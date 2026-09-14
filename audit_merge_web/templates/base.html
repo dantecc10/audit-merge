@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ brand.app_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <main class="container">
+        <header class="hero">
+            <h1>{{ brand.logo_text }}</h1>
+            <p>{{ brand.header_subtitle }}</p>
+            {% if brand.author_name %}
+            <p class="hero-author">por {{ brand.author_name }}</p>
+            {% endif %}
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <section class="alerts">
+            {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </section>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-links">
+            {% if brand.about_url %}
+            <a href="{{ brand.about_url }}" target="_blank" rel="noopener">Acerca de</a>
+            {% endif %}
+            {% if brand.contact_email %}
+            <a href="mailto:{{ brand.contact_email }}">Contacto</a>
+            {% endif %}
+            {% if brand.contact_github %}
+            <a href="{{ brand.contact_github }}" target="_blank" rel="noopener">GitHub</a>
+            {% endif %}
+        </div>
+        {% if brand.author_name %}
+        <p class="footer-author">por {{ brand.author_name }}</p>
+        {% endif %}
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
