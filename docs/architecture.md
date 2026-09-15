@@ -218,7 +218,7 @@ GitHub Actions workflow (`build.yml`):
 | Workers processed | ~860 |
 | Diff time | <500ms |
 | Memory | ~50MB |
-| Executable size | ~51MB |
+| Executable size (onefile) | ~72MB (ELF) / ~72MB (AppImage) |
 
 ## Future Improvements
 

@@ -224,7 +224,10 @@ logging.basicConfig(level=logging.DEBUG)
 3. Commit: `git commit -am "Release vX.Y.Z"`
 4. Tag: `git tag vX.Y.Z`
 5. Push: `git push origin main --tags`
-6. GitHub Actions builds and creates release
+6. GitHub Actions builds (`build.yml`) y el job `release` publica:
+   - `audit-merge-windows-<v>.exe`
+   - `audit-merge-<v>-x86_64.AppImage` y binario `audit-merge`
+   - GitHub además genera source code `.zip`/`.tar.gz` automáticamente
 
 ## Contributing
 

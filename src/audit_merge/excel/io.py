@@ -1,12 +1,10 @@
-import openpyxl
-from openpyxl.worksheet.worksheet import Worksheet
-from openpyxl.cell.cell import Cell
-from openpyxl.styles import Font, PatternFill, Border, Alignment, Protection
-from typing import Optional, Dict, List
 import copy
 
-from ..models import Worker, DocumentChecklist
+import openpyxl
+from openpyxl.cell.cell import Cell
+from openpyxl.worksheet.worksheet import Worksheet
 
+from ..models import DocumentChecklist, Worker
 
 HEADER_ROW = 3
 DATA_START_ROW = 4
@@ -82,7 +80,6 @@ def copy_cell_style(source: Cell, target: Cell):
 def _normalize_header(text: str) -> str:
     """Normalize a header string: lowercase, strip accents, collapse whitespace."""
     import unicodedata
-    import re
     text = text.strip().lower()
     # Strip accents: decomposition + remove combining marks
     nfkd = unicodedata.normalize("NFKD", text)
@@ -94,7 +91,7 @@ def _normalize_header(text: str) -> str:
     return text
 
 
-def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> Dict[str, int]:
+def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> dict[str, int]:
     """
     Detect column mapping by reading headers from the header row.
     Returns a dict mapping field_name -> column_index.
@@ -149,7 +146,7 @@ def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> Dict[s
     }
 
     # Pre-normalize all aliases
-    normalized_aliases: Dict[str, list[tuple[str, list[str]]]] = {}
+    normalized_aliases: dict[str, list[tuple[str, list[str]]]] = {}
     for field, aliases in header_aliases.items():
         normalized_aliases[field] = [
             (alias, _normalize_header(alias).split()) for alias in aliases
@@ -164,7 +161,7 @@ def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> Dict[s
 
         matched_field = None
         for field, alias_list in normalized_aliases.items():
-            for alias_text, alias_words in alias_list:
+            for alias_text, _alias_words in alias_list:
                 if norm == alias_text:
                     matched_field = field
                     break
@@ -172,7 +169,6 @@ def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> Dict[s
                 break
 
         if not matched_field:
-            header_words = norm.split()
             for field, alias_list in normalized_aliases.items():
                 for alias_text, alias_words in alias_list:
                     if len(alias_words) >= 3 and alias_text in norm:
@@ -187,7 +183,7 @@ def detect_column_mapping(ws: Worksheet, header_row: int = HEADER_ROW) -> Dict[s
     return column_map
 
 
-def merge_column_maps(base_map: Dict[str, int], updated_map: Dict[str, int]) -> Dict[str, int]:
+def merge_column_maps(base_map: dict[str, int], updated_map: dict[str, int]) -> dict[str, int]:
     """Merge two column maps, preferring base for core fields, updated for new fields."""
     merged = base_map.copy()
     for field, col in updated_map.items():
@@ -196,7 +192,7 @@ def merge_column_maps(base_map: Dict[str, int], updated_map: Dict[str, int]) -> 
     return merged
 
 
-def read_workers_from_sheet(ws: Worksheet, column_map: Optional[Dict[str, int]] = None) -> tuple[List[Worker], Dict[str, int]]:
+def read_workers_from_sheet(ws: Worksheet, column_map: dict[str, int] | None = None) -> tuple[list[Worker], dict[str, int]]:
     """
     Read workers from sheet using dynamic column detection.
     Returns (workers_list, column_map_used).
@@ -215,7 +211,7 @@ def read_workers_from_sheet(ws: Worksheet, column_map: Optional[Dict[str, int]] 
     known_cols = set(column_map.values())
 
     # Detect extra columns: columns with headers not mapped to any known field
-    extra_columns: Dict[str, int] = {}
+    extra_columns: dict[str, int] = {}
     max_col = ws.max_column
     for col_idx in range(1, max_col + 1):
         if col_idx in known_cols:
@@ -259,11 +255,11 @@ def read_workers_from_sheet(ws: Worksheet, column_map: Optional[Dict[str, int]] 
         except (ValueError, TypeError):
             no = None
 
-        def get_cell_value(field: str) -> str:
+        def get_cell_value(field: str, _row: int = row_idx) -> str:
             col = column_map.get(field)
             if col is None:
                 return ""
-            cell = ws.cell(row=row_idx, column=col)
+            cell = ws.cell(row=_row, column=col)
             return _format_cell_value(cell)
 
         worker = Worker(
@@ -311,7 +307,7 @@ def _format_cell_value(cell: Cell) -> str:
     return str(cell.value).strip()
 
 
-def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Optional[Dict[str, int]] = None, template_row: int = DATA_START_ROW):
+def write_workers_to_sheet(ws: Worksheet, workers: list[Worker], column_map: dict[str, int] | None = None, template_row: int = DATA_START_ROW):
     """
     Write workers to sheet using the provided column map.
     Preserves formatting from template row. Writes extra_fields to their mapped columns.
@@ -323,13 +319,13 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
     """
     if column_map is None:
         column_map = DEFAULT_COLUMN_MAP.copy()
-    
+
     # Capture template styles
     template_cells = {}
     for col_idx in range(1, ws.max_column + 1):
         cell = ws.cell(row=template_row, column=col_idx)
         template_cells[col_idx] = cell
-    
+
     # Assign collision-free rows, preserving original row_index when available
     assigned_rows = {}
     used_rows = set()
@@ -345,12 +341,12 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
             next_free_row += 1
             used_rows.add(r)
         assigned_rows[id(worker)] = r
-    
+
     written_cols = set()
-    
+
     for worker in workers:
         row_idx = assigned_rows[id(worker)]
-        
+
         # Write core fields
         for field_name in CORE_FIELDS:
             col_idx = column_map.get(field_name)
@@ -358,14 +354,14 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
                 continue
             cell = ws.cell(row=row_idx, column=col_idx)
             template_cell = template_cells.get(col_idx)
-            
+
             value = getattr(worker, field_name, "")
             cell.value = value
-            
+
             if template_cell:
                 copy_cell_style(template_cell, cell)
             written_cols.add(col_idx)
-        
+
         # Write checklist/data fields
         all_fields = CHECKLIST_FIELDS | DATA_FIELDS
         for field_name in all_fields:
@@ -374,14 +370,14 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
                 continue
             cell = ws.cell(row=row_idx, column=col_idx)
             template_cell = template_cells.get(col_idx)
-            
+
             value = getattr(worker.checklist, field_name, "")
             cell.value = value
-            
+
             if template_cell:
                 copy_cell_style(template_cell, cell)
             written_cols.add(col_idx)
-        
+
         # Write extra fields
         for field_name, value in worker.extra_fields.items():
             col_idx = column_map.get(field_name)
@@ -393,7 +389,7 @@ def write_workers_to_sheet(ws: Worksheet, workers: List[Worker], column_map: Opt
             if template_cell:
                 copy_cell_style(template_cell, cell)
             written_cols.add(col_idx)
-    
+
     # Preserve any extra columns not in our map (copy from template row)
     for col_idx in range(1, ws.max_column + 1):
         if col_idx not in written_cols and col_idx in template_cells:
@@ -416,14 +412,14 @@ def get_sheet_names(wb: openpyxl.Workbook) -> list[str]:
     return wb.sheetnames
 
 
-def find_revision_sheet(wb: openpyxl.Workbook) -> Optional[str]:
+def find_revision_sheet(wb: openpyxl.Workbook) -> str | None:
     for name in wb.sheetnames:
         if "revis" in name.lower() or "exp" in name.lower():
             return name
     return wb.sheetnames[0] if wb.sheetnames else None
 
 
-def read_workbook_with_detection(filename: str) -> tuple[List[Worker], Dict[str, int], str]:
+def read_workbook_with_detection(filename: str) -> tuple[list[Worker], dict[str, int], str]:
     """
     High-level function: load workbook, detect sheet, detect columns, read workers.
     Returns (workers, column_map, sheet_name).
